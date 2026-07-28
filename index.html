@@ -208,10 +208,9 @@ body{
   -webkit-backdrop-filter:saturate(1.4) blur(10px);
   border-bottom:1px solid var(--border);
 }
-.header-title{min-width:0;flex-shrink:1;}
-.header-title h2{margin:0;font-size:16px;font-weight:700;color:var(--text);letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.header-title p{margin:1px 0 0;font-size:12px;color:var(--text-mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-
+.header-title{display:flex;align-items:center;gap:20px;min-width:0;flex-shrink:1;}
+.header-title h2{margin:0;font-size:20px;font-weight:700;color:var(--text);letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.header-title p{margin:4px 0 0;font-size:14px;color:var(--text-mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .header-actions{margin-left:auto;display:flex;align-items:center;gap:8px;}
 .save-indicator{
   display:flex;align-items:center;gap:8px;
@@ -655,6 +654,7 @@ td.month-total-cell{
 .tech-card-progress-bar.q0{background:var(--text-mut);}
 .chart-card:has(.tech-cards-grid){height:auto;min-height:320px;}
 @media(max-width:640px){.chart-row{grid-template-columns:1fr;}.kpi-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));}.alert-grid{grid-template-columns:1fr;}.tech-cards-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));}}
+.app-footer{text-align:center;padding:12px 24px;font-size:11px;color:var(--text-mut);border-top:1px solid var(--border);margin-top:auto;}
 </style>
 </head>
 <body>
@@ -663,8 +663,10 @@ td.month-total-cell{
   <div class="app-main">
     <header class="app-header">
       <div class="header-title">
-        <h2>Analise de Performance</h2>
-        <p>Gestão de Desempenho das Equipes de Campo</p>
+        <div>
+          <h2>Analise de Performance</h2>
+          <p>Gestão de Desempenho das Equipes de Campo</p>
+        </div>
       </div>
       <div class="header-actions">
         <div class="save-indicator" title="Status de sincronização">
@@ -740,7 +742,7 @@ td.month-total-cell{
           </div>
           <div class="chart-row">
             <div class="chart-card"><h3>Perfil da equipe (Radar)</h3><canvas id="chartRadar"></canvas></div>
-            <div class="chart-card"><h3>Distribuição por quartil</h3><canvas id="chartQuartis"></canvas></div>
+            <div class="chart-card"><h3>Indisponibilidade Técnica</h3><div id="chartQuartis"></div></div>
           </div>
         </div>
       </div>
@@ -759,6 +761,7 @@ td.month-total-cell{
         <div class="params-wrap" id="paramsWrap"></div>
       </div>
     </div>
+      <footer class="app-footer">&copy; 2026 Alloha Fibra &mdash; Gest&atilde;o de Desempenho das Equipes de Campo<br>Desenvolvido por David Garcia</footer>
   </div>
 </div>
 
@@ -1565,7 +1568,7 @@ function renderDashboard(region, weeks){
             autoDataLabels: { display: true, formatter: v => fmtNum(v) + ' pts' }
           },
           scales: {
-            x: { grid: { display: false }, ticks: { color: textMut, maxRotation: 0, autoSkip: true, maxTicksLimit: 15 } },
+            x: { grid: { display: false }, ticks: { color: textMut, maxRotation: 0, autoSkip: false } },
             y: { grid: { color: borderColor }, ticks: { color: textMut }, beginAtZero: true, suggestedMax: MIN_SCORE() + 2 }
           }
         }
@@ -1870,40 +1873,45 @@ function renderDashboard(region, weeks){
     });
   }
 
-  /* --- 7. Distribuição por quartil (doughnut) --- */
-  destroyChart('quartisDist');
+  /* --- 7. Indisponibilidade Técnica (tabela) --- */
   const ctxQuart = document.getElementById('chartQuartis');
   if(ctxQuart){
-    const qData = [quartilCounts[1] || 0, quartilCounts[2] || 0, quartilCounts[3] || 0, quartilCounts[4] || 0];
-    const qColors = ['#10B981', '#3B7DD8', '#F59E0B', '#EF4444'];
-    const qLabels = ['1º Quartil', '2º Quartil', '3º Quartil', '4º Quartil'];
-    const hasData = qData.some(v => v > 0);
-    if(hasData){
-      chartInstances.quartisDist = new Chart(ctxQuart, {
-        type: 'doughnut',
-        data: {
-          labels: qLabels,
-          datasets: [{
-            data: qData,
-            backgroundColor: qColors,
-            borderWidth: 3,
-            borderColor: getCSSVar('--surface') || '#fff'
-          }]
-        },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          cutout: '55%',
-          plugins: {
-            legend: { position: 'right', labels: { color: textColor, padding: 10, font: { weight: 600, size: 11 } } },
-            tooltip: {
-              callbacks: {
-                label: ctx => ctx.label + ': ' + ctx.parsed + ' técnico(s)'
-              }
-            },
-            autoDataLabels: { display: true }
-          }
-        }
+    const parent = ctxQuart.closest('.chart-card') || ctxQuart.parentNode;
+    let summaryEl = parent.querySelector('.unavail-summary');
+    if(!summaryEl){
+      summaryEl = document.createElement('div');
+      summaryEl.className = 'unavail-summary';
+      summaryEl.style.cssText = 'padding:0 4px 12px;font-size:12px;color:var(--text-mut);display:flex;gap:24px;';
+      ctxQuart.parentNode.insertBefore(summaryEl, ctxQuart);
+    }
+    summaryEl.innerHTML = `<span>🔴 <strong>${overview.totalJustified}</strong> dias justificados</span><span>📊 <strong>${overview.unavailPct !== null ? Math.round(overview.unavailPct) + '%' : '–'}</strong> de indisponibilidade</span>`;
+
+    const justCodes = JUSTIFICATION_CODES
+      .filter(c => (overview.justCounts[c] || 0) > 0)
+      .sort((a,b) => (overview.justCounts[b] || 0) - (overview.justCounts[a] || 0));
+
+    if(justCodes.length > 0){
+      let html = '<div class="proj-table-wrap" style="max-height:none;"><table class="proj-table"><thead><tr>';
+      html += '<th>Código</th><th>Justificativa</th><th style="text-align:right;">Dias</th><th style="text-align:right;">%</th>';
+      html += '</tr></thead><tbody>';
+
+      justCodes.forEach(c => {
+        const count = overview.justCounts[c];
+        const pct = Math.round(count / overview.totalJustified * 100);
+        const color = JUSTIFICATION_COLORS[c];
+        const pctCls = pct >= 20 ? 'urgent' : pct >= 10 ? 'warn' : 'ok';
+        html += `<tr>
+          <td style="font-weight:600;color:var(--text);"><span class="swatch" style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${color.bg};border:1px solid ${color.text}55;margin-right:6px;vertical-align:middle;"></span>${c}</td>
+          <td>${JUSTIFICATION_LABELS[c] || ''}</td>
+          <td style="text-align:right;font-weight:700;color:var(--text);">${count}</td>
+          <td style="text-align:right;"><span class="proj-gap-cell ${pctCls}" style="display:inline-block;">${pct}%</span></td>
+        </tr>`;
       });
+
+      html += '</tbody></table></div>';
+      ctxQuart.innerHTML = html;
+    } else {
+      ctxQuart.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-mut);font-size:13px;">Nenhuma justificativa registrada.</div>';
     }
   }
 
