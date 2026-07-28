@@ -1095,7 +1095,7 @@ function render(){
   });
   html += '</tr></thead><tbody>';
 
-  region.technicians.forEach(tech=>{
+  [...region.technicians].sort((a,b) => a.nome.localeCompare(b.nome)).forEach(tech=>{
     html += `<tr data-funci="${tech.funci}"><td class="col-nome"><span class="tech-name">${tech.nome}</span><span class="tech-funci">${tech.funci}</span><button class="tech-remove" data-remove="${tech.funci}" title="Remover técnico">✕</button></td>`;
     weeks.forEach(w=>{
       w.forEach(d=>{
