@@ -1969,7 +1969,7 @@ function renderProjectionDashboard(region, weeks){
 
   if(remaining === 0){
     const pct = goals.totalExpectedPast > 0 ? Math.round(goals.totalAchieved / goals.totalExpectedPast * 100) : null;
-    wrap.innerHTML = `<div class="proj-card"><h3>🔮 Projeção de Fechamento</h3><div style="color:var(--text-mut);font-size:13px;">Mês encerrado. Total realizado: ${fmtNum(goals.totalAchieved)} pts de ${fmtNum(goals.totalExpectedPast)} esperados${pct !== null ? ' (' + pct + '%)' : ''}.</div></div>`;
+    wrap.innerHTML = `<div class="proj-card"><h3>Projeção de Fechamento</h3><div style="color:var(--text-mut);font-size:13px;">Mês encerrado. Total realizado: ${fmtNum(goals.totalAchieved)} pts de ${fmtNum(goals.totalExpectedPast)} esperados${pct !== null ? ' (' + pct + '%)' : ''}.</div></div>`;
     return;
   }
 
@@ -2011,7 +2011,7 @@ function renderProjectionDashboard(region, weeks){
   }).join('');
 
   const html = `<div class="proj-card">
-    <h3>🔮 Projeção de Fechamento</h3>
+    <h3>Projeção de Fechamento</h3>
     <div class="proj-resumo">
       <div class="proj-stat">
         <span class="label">Realizado</span>
