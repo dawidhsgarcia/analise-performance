@@ -64,15 +64,16 @@
             ctx.fillText(String(v), cx, cy);
           } else {
             ctx.fillStyle = textColor;
-            const label = options.formatter ? options.formatter(v) : String(v);
+            const raw = options.formatter ? options.formatter(v, idx) : String(v);
+            const lines = String(raw).split('\n');
             if(chart.config.options.indexAxis === 'y'){
               ctx.textAlign = 'left';
               ctx.textBaseline = 'middle';
-              ctx.fillText(label, el.x + 4, el.y);
+              lines.forEach((line, li) => { ctx.fillText(line, el.x + 4, el.y + li * 13); });
             } else {
               ctx.textAlign = 'center';
               ctx.textBaseline = 'bottom';
-              ctx.fillText(label, el.x, el.y - 4);
+              lines.forEach((line, li) => { ctx.fillText(line, el.x, el.y - 4 - (lines.length - 1 - li) * 13); });
             }
           }
           ctx.restore();
@@ -585,6 +586,7 @@ td.month-total-cell{
 }
 .chart-card h3{margin:0 0 12px;font-size:14px;font-weight:700;color:var(--text);letter-spacing:-.01em;}
 .chart-card canvas{flex:1;min-height:0;width:100% !important;}
+.chart-card-auto{height:auto;min-height:200px;}
 .kpi-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:14px;margin-bottom:20px;}
 .kpi-card-wide{grid-column:span 2;}
 .kpi-card{
@@ -744,6 +746,12 @@ td.month-total-cell{
             <div class="chart-card"><h3>Perfil da equipe (Radar)</h3><canvas id="chartRadar"></canvas></div>
             <div class="chart-card"><h3>Indisponibilidade Técnica</h3><div id="chartQuartis"></div></div>
           </div>
+          <div class="chart-row">
+            <div class="chart-card chart-card-auto chart-wide">
+              <h3>OS no Prazo por Atividade</h3>
+              <div id="chartActivitySla"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -862,6 +870,7 @@ function migrateLoadedState(parsed){
     if(!r.slaCounts) r.slaCounts = { evaluated: 0, onTime: 0 };
     if(typeof r.totalOS !== 'number') r.totalOS = 0;
     if(!r.techSla) r.techSla = {};
+    if(!r.activitySla) r.activitySla = {};
   });
   if(parsed.rankingMode !== 'business' && parsed.rankingMode !== 'worked') parsed.rankingMode = 'business';
   if(!parsed.params) parsed.params = JSON.parse(JSON.stringify(DEFAULT_PARAMS));
@@ -1075,6 +1084,8 @@ function render(){
     destroyChart('evolucaoDaily');
     destroyChart('tendenciaSem');
     destroyChart('radarEquipe'); destroyChart('quartisDist');
+    const acSl = document.getElementById('chartActivitySla');
+    if(acSl) acSl.innerHTML = '';
     return;
   }
 
@@ -1415,6 +1426,8 @@ function renderDashboard(region, weeks){
     destroyChart('evolucaoDaily');
     destroyChart('tendenciaSem');
     destroyChart('radarEquipe'); destroyChart('quartisDist');
+    const ac = document.getElementById('chartActivitySla');
+    if(ac) ac.innerHTML = '';
     return;
   }
 
@@ -1545,6 +1558,8 @@ function renderDashboard(region, weeks){
       evoBarColors.push(dailyAvg < minScoreForDow(d.dow) ? dangerColor : successColor);
     });
 
+    const dailyGoals = pastBizDays.map(d => minScoreForDow(d.dow));
+
     const ctxEvo = document.getElementById('chartEvolucao');
     if(ctxEvo){
       chartInstances.evolucaoDaily = new Chart(ctxEvo, {
@@ -1565,7 +1580,11 @@ function renderDashboard(region, weeks){
           plugins: {
             legend: { display: false },
             tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + fmtNum(ctx.parsed.y) + ' pts' } },
-            autoDataLabels: { display: true, formatter: v => fmtNum(v) + ' pts' }
+            autoDataLabels: { display: true, formatter: (v, idx) => {
+              const goal = idx < dailyGoals.length ? dailyGoals[idx] : 0;
+              const pct = goal > 0 ? Math.round((v / goal) * 100) : 0;
+              return fmtNum(v) + '\n' + pct + '%';
+            } }
           },
           scales: {
             x: { grid: { display: false }, ticks: { color: textMut, maxRotation: 0, autoSkip: false } },
@@ -1799,8 +1818,8 @@ function renderDashboard(region, weeks){
         responsive: true, maintainAspectRatio: false,
         plugins: {
           legend: { display: false },
-          tooltip: { callbacks: { label: ctx => 'Média: ' + fmtNum(ctx.parsed.y) + ' pts/dia' } },
-          autoDataLabels: { display: true, formatter: v => fmtNum(v) + ' pts' }
+          tooltip: { callbacks: { label: ctx => 'Média: ' + fmtNum(ctx.parsed.y) + '/dia' } },
+          autoDataLabels: { display: true, formatter: v => fmtNum(v) }
         },
         scales: {
           x: { grid: { display: false }, ticks: { color: textMut } },
@@ -1916,6 +1935,52 @@ function renderDashboard(region, weeks){
   }
 
   renderProjectionDashboard(region, weeks);
+  renderActivitySlaTable(document.getElementById('chartActivitySla'), region);
+}
+
+/* ---------------------------------------------------------------
+   OS no Prazo por Atividade
+--------------------------------------------------------------- */
+function renderActivitySlaTable(container, region){
+  if(!container) return;
+  const sla = region.activitySla || {};
+  const entries = Object.entries(sla);
+  if(entries.length === 0){
+    container.innerHTML = '<div style="padding:32px;text-align:center;color:var(--text-mut);font-size:13px;">Nenhuma atividade encontrada. Importe um relatório com dados de OS.</div>';
+    return;
+  }
+  entries.sort((a,b) => b[1].total - a[1].total);
+
+  const totalEval = entries.reduce((s, [,v]) => s + v.evaluated, 0);
+  const totalOnt  = entries.reduce((s, [,v]) => s + v.onTime, 0);
+
+  let html = '<div class="unavail-summary" style="padding:0 4px 12px;font-size:12px;color:var(--text-mut);display:flex;gap:24px;">'
+    + `<span>📋 <strong>${entries.length}</strong> tipos de atividade</span>`
+    + `<span>✅ <strong>${totalOnt}</strong> de <strong>${totalEval}</strong> OS no prazo`
+    + ` (${totalEval > 0 ? Math.round(totalOnt/totalEval*100) : 0}%)</span></div>`;
+
+  html += '<div class="proj-table-wrap" style="max-height:none;"><table class="proj-table"><thead><tr>'
+    + '<th>Atividade</th>'
+    + '<th style="text-align:right;">Total OS</th>'
+    + '<th style="text-align:right;">Avaliadas</th>'
+    + '<th style="text-align:right;">No Prazo</th>'
+    + '<th style="text-align:right;">SLA %</th>'
+    + '</tr></thead><tbody>';
+
+  entries.forEach(([atv, d]) => {
+    const pct = d.evaluated > 0 ? Math.round((d.onTime / d.evaluated) * 100) : null;
+    const cls = pct !== null ? (pct >= 90 ? 'ok' : pct >= 70 ? 'warn' : 'urgent') : '';
+    html += `<tr>
+      <td style="font-weight:600;color:var(--text);">${atv}</td>
+      <td style="text-align:right;font-weight:700;color:var(--text);">${d.total}</td>
+      <td style="text-align:right;">${d.evaluated}</td>
+      <td style="text-align:right;">${d.onTime}</td>
+      <td style="text-align:right;"><span class="proj-gap-cell ${cls}" style="display:inline-block;">${pct !== null ? pct + '%' : '–'}</span></td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
 }
 
 /* ---------------------------------------------------------------
@@ -2432,7 +2497,7 @@ function applyActivityReport(rawRows){
   // agrega[period][funci] = { total, iso: soma }
   const agg = {}; // agg[period][funci][iso] = soma de baremo
   const nomes = {}; // funci -> nome (do relatório)
-  const activityCounts = {}; // tipo de atividade -> quantidade de OS
+  const activitySla = {}; // atividade -> { total, evaluated, onTime }
   let validRows = 0, skippedRows = 0;
   let slaEvaluated = 0, slaOnTime = 0, totalOSCount = 0;
   const techSla = {};
@@ -2465,7 +2530,12 @@ function applyActivityReport(rawRows){
     if(row['tecnico']) nomes[funci] = String(row['tecnico']).trim().toUpperCase();
 
     const atividade = row['atividade'] ? String(row['atividade']).trim() : null;
-    if(atividade && !atividade.toUpperCase().includes('APOIO')) activityCounts[atividade] = (activityCounts[atividade] || 0) + 1;
+    if(atividade && !atividade.toUpperCase().includes('APOIO')){
+      if(!activitySla[atividade]) activitySla[atividade] = { total: 0, evaluated: 0, onTime: 0 };
+      activitySla[atividade].total++;
+      if(Number(row['avalia_prazo']) === 1) activitySla[atividade].evaluated++;
+      if(Number(row['realizado_no_prazo']) === 1) activitySla[atividade].onTime++;
+    }
 
     if(!agg[period]) agg[period] = {};
     if(!agg[period][funci]) agg[period][funci] = {};
@@ -2479,7 +2549,7 @@ function applyActivityReport(rawRows){
   }
 
   const region = currentRegion();
-  region.activityCounts = activityCounts;
+  region.activitySla = activitySla;
   region.slaCounts = { evaluated: slaEvaluated, onTime: slaOnTime };
   region.totalOS = totalOSCount;
   region.techSla = techSla;
